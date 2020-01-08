@@ -46,6 +46,15 @@ void wakeUp() {
   Serial.println("Awake!");
 }
 
+bool tap_detect(){
+  return True
+}
+
+bool reset_fn(){
+  
+  return True
+}
+
 void setup() {
   // serial to display data
   Serial.begin(115200);
