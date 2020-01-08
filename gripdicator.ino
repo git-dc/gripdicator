@@ -49,11 +49,12 @@ void wakeUp() {
 }
 
 void calibration() {
+  digitalWrite(LED_BUILTIN, HIGH);
   double calibration_sum = 0;
   int k = 0;
   long start_time = millis();
-//  Serial.print("Starting calibration: ");
-//  Serial.println(millis());
+  //  Serial.print("Starting calibration: ");
+  //  Serial.println(millis());
 
   while (millis() - start_time < 1000) {
     cur_loop = millis();
@@ -69,10 +70,11 @@ void calibration() {
     }
   }
   g_bias = calibration_sum / k - g;
-//  Serial.print("Calibration complete: ");
-//  Serial.print(millis());
-//  Serial.print(". Bias calculated to be: ");
-//  Serial.println(g_bias);
+  //  Serial.print("Calibration complete: ");
+  //  Serial.print(millis());
+  //  Serial.print(". Bias calculated to be: ");
+  //  Serial.println(g_bias);
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
 void setup() {
