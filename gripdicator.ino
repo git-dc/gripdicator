@@ -53,6 +53,34 @@ bool tap_detect(){
 bool reset_fn(){
   
   return True
+
+void accel_calibration() {
+  digitalWrite(LED_BUILTIN, HIGH);
+  double calibration_sum = 0;
+  int k = 0;
+  long start_time = millis();
+  //  Serial.print("Starting accelerometer calibration: ");
+  //  Serial.println(millis());
+
+  while (millis() - start_time < 1000) {
+    cur_loop = millis();
+    if (cur_loop - prev_loop >= 10) {
+      prev_loop = cur_loop;
+      IMU.readSensor();
+      ax = IMU.getAccelX_mss();
+      ay = IMU.getAccelY_mss();
+      az = IMU.getAccelZ_mss();
+      ar = sqrt(ax * ax + ay * ay  + az * az);
+      calibration_sum += ar;
+      k++;
+    }
+  }
+  g_bias = calibration_sum / k - g;
+  //  Serial.print("Accelerometer calibration complete: ");
+  //  Serial.print(millis());
+  //  Serial.print(". Bias calculated to be: ");
+  //  Serial.println(g_bias);
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
 void setup() {
@@ -71,17 +99,7 @@ void setup() {
   }
   // setting the accelerometer full scale range to +/-8G
   IMU.setAccelRange(MPU9250::ACCEL_RANGE_2G);
-  //  // setting DLPF bandwidth to 20 Hz
-  //  IMU.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_20HZ);
-  //  // setting SRD to 19 for a 50 Hz update rate
-  //  IMU.setSrd(19);
-  //  // enabling wake on motion low power mode with a threshold of 400 mg and
-  //  // an accelerometer data rate of 15.63 Hz.
-  //  IMU.enableWakeOnMotion(400,MPU9250::LP_ACCEL_ODR_15_63HZ);
-  ////   attaching the interrupt to microcontroller pin 1
-  //  pinMode(1, INPUT);
-  //  attachInterrupt(1, wakeUp, RISING);
-
+  accel_calibration();
 }
 
 void loop() {
