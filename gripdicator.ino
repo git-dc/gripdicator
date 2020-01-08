@@ -40,18 +40,25 @@ double g_bias; //use with adaptive calibration
 double prev_val = 0;
 double energy_b_derivative = 0;
 long interval = SENSOR_LOOP_DURATION;
-long prev_loop = millis();
+long prev_loop = millis() - interval;
 long cur_loop = millis();
-double calibration_sum;
-int k;
+
 
 void wakeUp() {
   Serial.println("Awake!");
 }
 
-void calibtation() {
-  while (millis() < 5000) {
-    if (cur_loop - prev_loop >= 10)  {
+void calibration() {
+  double calibration_sum = 0;
+  int k = 0;
+  long start_time = millis();
+//  Serial.print("Starting calibration: ");
+//  Serial.println(millis());
+
+  while (millis() - start_time < 1000) {
+    cur_loop = millis();
+    if (cur_loop - prev_loop >= 10) {
+      prev_loop = cur_loop;
       IMU.readSensor();
       ax = IMU.getAccelX_mss();
       ay = IMU.getAccelY_mss();
@@ -60,8 +67,12 @@ void calibtation() {
       calibration_sum += ar;
       k++;
     }
-    g_bias = calibration_sum/k - g;
   }
+  g_bias = calibration_sum / k - g;
+//  Serial.print("Calibration complete: ");
+//  Serial.print(millis());
+//  Serial.print(". Bias calculated to be: ");
+//  Serial.println(g_bias);
 }
 
 void setup() {
@@ -91,6 +102,7 @@ void setup() {
   //  pinMode(1, INPUT);
   //  attachInterrupt(1, wakeUp, RISING);
 
+  calibration();
 }
 
 void loop() {
