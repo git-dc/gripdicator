@@ -70,6 +70,7 @@ bool check_for_reset() {
   long val = 0;
   long last_val = 0;
   long difference = 0;
+  int k = 0;
   bool successes[4][4] = {
     {false, false, false, false},
     {false, false, false, false},
@@ -81,12 +82,27 @@ bool check_for_reset() {
     temp_q.enqueue(val);
     difference = val - last_val;
     last_val = val;
-    
     rhythm_base.enqueue(difference);
-    if (rhythm_base.isFull()) {
-      rhythm_base.dequeue();
+
+    if (in_range(difference, passphrase[k]*rhythm_base.dequeue())) {
+      Serial.println("in range");
+      successes[0][k] = true;
+      k++;
     }
-    
+
+    else {
+      Serial.println("not in range, resetting");
+      k = 0;
+      for (int i = 0; i++; i < 4) {
+        successes[0][i] = false;
+      }
+    }
+
+
+    //    if (rhythm_base.isFull()) {
+    //      rhythm_base.dequeue();
+    //    }
+
   }
   while (not temp_q.isEmpty()) {
     val = temp_q.dequeue();
@@ -148,9 +164,10 @@ void setup() {
 
 void loop() {
   if (tap_detected) {
-    //    tap_detected = false;
+    tap_detected = false;
     tap_interval_q.dequeue();
     tap_interval_q.enqueue(millis());
+    check_for_reset();
   }
 
   cur_loop = millis();
