@@ -27,13 +27,13 @@
 // an MPU9250 object with the MPU-9250 sensor on I2C bus 0 with address 0x68
 MPU9250 IMU(Wire, 0x68);
 int status;
-double ax;
-double ay;
-double az;
-double ar;
-double ar2;
-double energy_integral;
-double g = 9.806 - 0.5 * (9.832 - 9.780) * cos(2 * 24.4539 * PI / 180);
+double ax;  // accelerometer reading in x axis
+double ay;  //        --//--         in y axis
+double az;  //        --//--         in z axis
+double ar;  //        --//--         resultant vector magnitude
+double ar2; //        --//--         resultant vector magnitude squared
+double energy_integral; // integral of the energy of the resultant acceleration signal
+double g = 9.806 - 0.5 * (9.832 - 9.780) * cos(2 * 24.4539 * PI / 180); // precise value of g for Abu Dhabi
 //double g_bias = - 0.2925; //no accel range setting
 double g_bias = - 0.487; //2g accel range setting
 double prev_val = 0;
@@ -62,8 +62,6 @@ void setup() {
   }
   // setting the accelerometer full scale range to +/-8G
   IMU.setAccelRange(MPU9250::ACCEL_RANGE_2G);
-  //  // setting the gyroscope full scale range to +/-500 deg/s
-  //  IMU.setGyroRange(MPU9250::GYRO_RANGE_500DPS);
   //  // setting DLPF bandwidth to 20 Hz
   //  IMU.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_20HZ);
   //  // setting SRD to 19 for a 50 Hz update rate
