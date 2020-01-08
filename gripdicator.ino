@@ -22,6 +22,7 @@
 */
 
 #include "MPU9250.h"
+#define SENSOR_LOOP_DURATION 5
 
 // an MPU9250 object with the MPU-9250 sensor on I2C bus 0 with address 0x68
 MPU9250 IMU(Wire, 0x68);
@@ -30,8 +31,15 @@ double ax;
 double ay;
 double az;
 double ar;
-double ar_sq;
-double moving_ave;
+double ar2;
+double integral;
+double g = 9.806 - 0.5 * (9.832 - 9.780) * cos(2 * 24.4539 * PI / 180);
+double g_fudge = - 0.2925;
+double prev_val = 0;
+double bderivative = 0;
+long interval = SENSOR_LOOP_DURATION;
+long prev_loop = millis();
+long cur_loop = millis();
 
 void setup() {
   // serial to display data
@@ -41,27 +49,30 @@ void setup() {
   // start communication with IMU
   status = IMU.begin();
   if (status < 0) {
-    Serial.println("IMU initialization unsuccessful");
-    Serial.println("Check IMU wiring or try cycling power");
+    Serial.println("IMU initialization unsuccessful.");
+    Serial.println("Check IMU wiring or try cycling power.");
     Serial.print("Status: ");
     Serial.println(status);
     while (1) {}
   }
+
 }
 
 void loop() {
-  // read the sensor
-  IMU.readSensor();
-  // display the data
-  ax = IMU.getAccelX_mss();
-  //  Serial.print(ax,6);
-  Serial.print("\t");
-  ay = IMU.getAccelY_mss();
-  //  Serial.print(ay,6);
-  Serial.print("\t");
-  az = IMU.getAccelZ_mss();
-  //  Serial.println(az,6);
-  ar = sqrt(ax * ax + ay * ay  + az * az);
-  Serial.println(ar - 9.5, 6);
-  delay(10);
+  cur_loop = millis();
+  if (cur_loop - prev_loop >= interval)  {
+    prev_loop = cur_loop;
+    IMU.readSensor();
+    ax = IMU.getAccelX_mss();
+    ay = IMU.getAccelY_mss();
+    az = IMU.getAccelZ_mss();
+
+    ar2 = ax * ax + ay * ay  + az * az;
+    ar = sqrt(ar2) - (g + g_fudge);
+    ar2 = pow(ar, 2);
+    integral += ar2 ;
+    bderivative = ar2 - prev_val;
+    prev_val = ar2;
+    Serial.println(integral, 6);
+  }
 }
