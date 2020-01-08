@@ -22,10 +22,14 @@
 */
 
 #include "MPU9250.h"
+#include <QueueArray.h>
 #define SENSOR_LOOP_DURATION 20
+#define WINDOW 5
 
 // an MPU9250 object with the MPU-9250 sensor on I2C bus 0 with address 0x68
 MPU9250 IMU(Wire, 0x68);
+QueueArray<double> queue;
+
 int status;
 double ax;  // accelerometer reading in x axis
 double ay;  //        --//--         in y axis
@@ -42,10 +46,29 @@ double energy_b_derivative = 0;
 long interval = SENSOR_LOOP_DURATION;
 long prev_loop = millis() - interval;
 long cur_loop = millis();
-
+float cd_coeff[5] = {0.0833, -0.6666, 0, 0.6666, -0.0833};
 
 void wakeUp() {
   Serial.println("Awake!");
+}
+
+double getEnergy(){
+  
+  cur_loop = millis();
+  if (cur_loop - prev_loop >= interval)  {
+    prev_loop = cur_loop;
+    IMU.readSensor();
+    ax = IMU.getAccelX_mss();
+    ay = IMU.getAccelY_mss();
+    az = IMU.getAccelZ_mss();
+    ar = sqrt(ax * ax + ay * ay  + az * az) - (g + g_bias);
+    ar2 = pow(ar, 2);
+    energy_integral += ar2;
+    energy_b_derivative = ar2 - prev_val;
+    prev_val = ar2;
+  }
+
+  return energy_integral;
 }
 
 void calibration() {
@@ -77,6 +100,42 @@ void calibration() {
   digitalWrite(LED_BUILTIN, LOW);
 }
 
+bool tapDetect(){
+
+  // delete old value
+  queue.dequeue();
+
+  // enqueue a new reading
+  queue.enqueue(getEnergy());
+
+  // obtain values by dequeing
+  // iteratively calculate central difference
+  // requeue to restore how the queue looks
+
+  double central_difference = 0; 
+ 
+  for (int i=0; i<WINDOW; ++i){
+    double val = queue.dequeue();
+    central_difference += (val*cd_coeff[i]);
+    queue.enqueue(val);
+  }
+
+  central_difference /= interval*0.001;
+
+//  Serial.print("Central Difference:");
+//  Serial.println(central_difference);
+
+  if (central_difference >= 15){
+    Serial.println("Tapped!");
+    Serial.println(central_difference);
+    return 1;
+  }
+
+  else {
+    return 0;
+  }
+}
+
 void setup() {
   // serial to display data
   Serial.begin(115200);
@@ -105,21 +164,14 @@ void setup() {
   //  attachInterrupt(1, wakeUp, RISING);
 
   calibration();
+  Serial.println("Calibrated");
+  delay(1000);
+  for (int i = 0; i < 5; ++i) {
+    queue.enqueue(getEnergy());
+  }
 }
 
 void loop() {
-  cur_loop = millis();
-  if (cur_loop - prev_loop >= interval)  {
-    prev_loop = cur_loop;
-    IMU.readSensor();
-    ax = IMU.getAccelX_mss();
-    ay = IMU.getAccelY_mss();
-    az = IMU.getAccelZ_mss();
-    ar = sqrt(ax * ax + ay * ay  + az * az) - (g + g_bias);
-    ar2 = pow(ar, 2);
-    energy_integral += ar2;
-    energy_b_derivative = ar2 - prev_val;
-    prev_val = ar2;
-    Serial.println(energy_integral, 6);
-  }
+  getEnergy();
+  bool tapFlag = tapDetect();
 }
