@@ -22,7 +22,7 @@
 */
 
 #include "MPU9250.h"
-#define SENSOR_LOOP_DURATION 5
+#define SENSOR_LOOP_DURATION 20
 
 // an MPU9250 object with the MPU-9250 sensor on I2C bus 0 with address 0x68
 MPU9250 IMU(Wire, 0x68);
@@ -32,15 +32,15 @@ double ay;
 double az;
 double ar;
 double ar2;
-double integral;
+double energy_integral;
 double g = 9.806 - 0.5 * (9.832 - 9.780) * cos(2 * 24.4539 * PI / 180);
-double g_fudge = - 0.2925;
+//double g_bias = - 0.2925; //no accel range setting
+double g_bias = - 0.487; //2g accel range setting
 double prev_val = 0;
-double bderivative = 0;
+double energy_b_derivative = 0;
 long interval = SENSOR_LOOP_DURATION;
 long prev_loop = millis();
 long cur_loop = millis();
-
 
 void wakeUp() {
   Serial.println("Awake!");
@@ -60,20 +60,20 @@ void setup() {
     Serial.println(status);
     while (1) {}
   }
-  // setting the accelerometer full scale range to +/-8G 
-  IMU.setAccelRange(MPU9250::ACCEL_RANGE_8G);
-  // setting the gyroscope full scale range to +/-500 deg/s
-  IMU.setGyroRange(MPU9250::GYRO_RANGE_500DPS);
-  // setting DLPF bandwidth to 20 Hz
-  IMU.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_20HZ);
-  // setting SRD to 19 for a 50 Hz update rate
-  IMU.setSrd(19);
-  // enabling wake on motion low power mode with a threshold of 400 mg and
-  // an accelerometer data rate of 15.63 Hz. 
-  IMU.enableWakeOnMotion(400,MPU9250::LP_ACCEL_ODR_15_63HZ);
-  // attaching the interrupt to microcontroller pin 1
-  pinMode(1,INPUT);
-  attachInterrupt(1,wakeUp,RISING);
+  // setting the accelerometer full scale range to +/-8G
+  IMU.setAccelRange(MPU9250::ACCEL_RANGE_2G);
+  //  // setting the gyroscope full scale range to +/-500 deg/s
+  //  IMU.setGyroRange(MPU9250::GYRO_RANGE_500DPS);
+  //  // setting DLPF bandwidth to 20 Hz
+  //  IMU.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_20HZ);
+  //  // setting SRD to 19 for a 50 Hz update rate
+  //  IMU.setSrd(19);
+  //  // enabling wake on motion low power mode with a threshold of 400 mg and
+  //  // an accelerometer data rate of 15.63 Hz.
+  //  IMU.enableWakeOnMotion(400,MPU9250::LP_ACCEL_ODR_15_63HZ);
+  ////   attaching the interrupt to microcontroller pin 1
+  //  pinMode(1, INPUT);
+  //  attachInterrupt(1, wakeUp, RISING);
 
 }
 
@@ -85,13 +85,11 @@ void loop() {
     ax = IMU.getAccelX_mss();
     ay = IMU.getAccelY_mss();
     az = IMU.getAccelZ_mss();
-
-    ar2 = ax * ax + ay * ay  + az * az;
-    ar = sqrt(ar2) - (g + g_fudge);
+    ar = sqrt(ax * ax + ay * ay  + az * az) - (g + g_bias);
     ar2 = pow(ar, 2);
-    integral += ar2 ;
-    bderivative = ar2 - prev_val;
+    energy_integral += ar2;
+    energy_b_derivative = ar2 - prev_val;
     prev_val = ar2;
-    Serial.println(integral, 6);
+    Serial.println(energy_integral, 6);
   }
 }
