@@ -20,9 +20,10 @@
   DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-
+#include <Queue.h>
 #include "MPU9250.h"
 #define SENSOR_LOOP_DURATION 20
+#define TOLERANCE 100
 
 // an MPU9250 object with the MPU-9250 sensor on I2C bus 0 with address 0x68
 MPU9250 IMU(Wire, 0x68);
@@ -42,19 +43,57 @@ double energy_b_derivative = 0;
 long interval = SENSOR_LOOP_DURATION;
 long prev_loop = millis() - interval;
 long cur_loop = millis();
+double passphrase[4] = {1.0, 2.0, 0.5, 0.5};
+bool tap_detected = false;
+DataQueue<long> tap_interval_q(20);
 
+bool in_range(double val, double target, double tolerance = TOLERANCE) {
+  if (val < target + tolerance and val > target - tolerance) {
+    return true;
+  }
+  else {
+    return false;
+  }
+}
 
 void wakeUp() {
   Serial.println("Awake!");
 }
 
-bool tap_detect(){
-  return True
+bool tapDetect() {
+  return true;
 }
 
-bool reset_fn(){
-  
-  return True
+bool check_for_reset() {
+  DataQueue<long> temp_q(20);
+  DataQueue<long> rhythm_base(4);
+  long val = 0;
+  long last_val = 0;
+  long difference = 0;
+  bool successes[4][4] = {
+    {false, false, false, false},
+    {false, false, false, false},
+    {false, false, false, false},
+    {false, false, false, false},
+  };
+  while (not tap_interval_q.isEmpty()) {
+    val = tap_interval_q.dequeue();
+    temp_q.enqueue(val);
+    difference = val - last_val;
+    last_val = val;
+    
+    rhythm_base.enqueue(difference);
+    if (rhythm_base.isFull()) {
+      rhythm_base.dequeue();
+    }
+    
+  }
+  while (not temp_q.isEmpty()) {
+    val = temp_q.dequeue();
+    tap_interval_q.enqueue(val);
+  }
+  return true;
+}
 
 void accel_calibration() {
   digitalWrite(LED_BUILTIN, HIGH);
@@ -102,9 +141,18 @@ void setup() {
   // setting the accelerometer full scale range to +/-8G
   IMU.setAccelRange(MPU9250::ACCEL_RANGE_2G);
   accel_calibration();
+  while (not tap_interval_q.isFull()) {
+    tap_interval_q.enqueue(0);
+  }
 }
 
 void loop() {
+  if (tap_detected) {
+    //    tap_detected = false;
+    tap_interval_q.dequeue();
+    tap_interval_q.enqueue(millis());
+  }
+
   cur_loop = millis();
   if (cur_loop - prev_loop >= interval)  {
     prev_loop = cur_loop;
