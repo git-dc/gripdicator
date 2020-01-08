@@ -33,17 +33,35 @@ double az;  //        --//--         in z axis
 double ar;  //        --//--         resultant vector magnitude
 double ar2; //        --//--         resultant vector magnitude squared
 double energy_integral; // integral of the energy of the resultant acceleration signal
-double g = 9.806 - 0.5 * (9.832 - 9.780) * cos(2 * 24.4539 * PI / 180); // precise value of g for Abu Dhabi
+const double g = 9.806 - 0.5 * (9.832 - 9.780) * cos(2 * 24.4539 * PI / 180); // precise value of g for Abu Dhabi
 //double g_bias = - 0.2925; //no accel range setting
-double g_bias = - 0.487; //2g accel range setting
+//double g_bias = - 0.487; //2g accel range setting
+double g_bias; //use with adaptive calibration
 double prev_val = 0;
 double energy_b_derivative = 0;
 long interval = SENSOR_LOOP_DURATION;
 long prev_loop = millis();
 long cur_loop = millis();
+double calibration_sum;
+int k;
 
 void wakeUp() {
   Serial.println("Awake!");
+}
+
+void calibtation() {
+  while (millis() < 5000) {
+    if (cur_loop - prev_loop >= 10)  {
+      IMU.readSensor();
+      ax = IMU.getAccelX_mss();
+      ay = IMU.getAccelY_mss();
+      az = IMU.getAccelZ_mss();
+      ar = sqrt(ax * ax + ay * ay  + az * az);
+      calibration_sum += ar;
+      k++;
+    }
+    g_bias = calibration_sum/k - g;
+  }
 }
 
 void setup() {
