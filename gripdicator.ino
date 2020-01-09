@@ -52,7 +52,6 @@ double passphrase[4] = {1.0, 2.0, 0.5, 0.5};
 bool tap_detected = false;
 DataQueue<long> tap_interval_q(20);
 DataQueue<double> energy_integral_q(WINDOW);
-DataQueue<double> energy_mma_q(WINDOW);
 float energy_mma_n = 20.0;
 double energy_mma;
 float derivative_mma_n = 20.0;
@@ -96,21 +95,17 @@ void wakeUp() {
 }
 
 double getEnergy() {
-  cur_loop = millis();
-  if (cur_loop - prev_loop >= interval)  {
-    prev_loop = cur_loop;
-    IMU.readSensor();
-    ax = IMU.getAccelX_mss();
-    ay = IMU.getAccelY_mss();
-    az = IMU.getAccelZ_mss();
-    ar = sqrt(ax * ax + ay * ay  + az * az) - (g + g_bias);
-    ar2 = pow(ar, 2);
-    energy_integral += ar2;
-    energy_b_derivative = ar2 - prev_val;
-    prev_val = ar2;
-  }
-
-  return energy_integral;
+  IMU.readSensor();
+  ax = IMU.getAccelX_mss();
+  ay = IMU.getAccelY_mss();
+  az = IMU.getAccelZ_mss();
+  ar = sqrt(ax * ax + ay * ay  + az * az) - (g + g_bias);
+  ar2 = pow(ar, 2);
+  energy_integral += ar2;
+  energy_b_derivative = ar2 - prev_val;
+  prev_val = ar2;
+  energy_mma = (energy_mma * (energy_mma_n - 1) + energy_integral) / energy_mma_n;
+  return energy_mma;
 }
 
 bool check_for_reset() {
@@ -162,61 +157,28 @@ bool check_for_reset() {
 
 
 bool tapDetect() {
+  double energy_integral_mma_sample = 0;
   float cd_coeff[WINDOW] = {0.08333333333, -0.6666666666, 0, 0.6666666666, -0.08333333333};
-
-  double energy_integral = getEnergy();
-  energy_integral_q.dequeue();
-  energy_integral_q.enqueue(energy_integral);
-
-  energy_mma = (energy_mma * (energy_mma_n - 1) + energy_integral) / energy_mma_n;
-  energy_mma_q.dequeue();
-  energy_mma_q.enqueue(energy_mma);
-
-  // obtain values by dequeing
-  // iteratively calculate central difference
-  // requeue to restore how the queue looks
-
-  //  // Plotting energy raw and smoothed
-  //  Serial.print(energy_mma, 6);
-  //  Serial.print("\t");
-  //  Serial.print(energy_integral, 6);
-  //  Serial.print("\t");
-  double energy_central_difference = 0;
-  double energy_mma_central_difference = 0;
-
-  for (int i = 0; i < WINDOW; ++i) {
-    double val = energy_integral_q.dequeue();
-    energy_central_difference += (val * cd_coeff[i]);
-    energy_integral_q.enqueue(val);
+  cur_loop = millis();
+  if (cur_loop - prev_loop >= interval)  {
+    prev_loop = cur_loop;
+    energy_integral_mma_sample = getEnergy();
+    energy_integral_q.dequeue();
+    energy_integral_q.enqueue(energy_integral_mma_sample);
+    double energy_mma_central_difference = 0;
+    for (int i = 0; i < WINDOW; ++i) {
+      double val = energy_integral_q.dequeue();
+      energy_central_difference += (val * cd_coeff[i]);
+      energy_integral_q.enqueue(val);
+    }
+    energy_central_difference /= (interval * 0.001);
+    derivative_mma = (derivative_mma * (derivative_mma_n - 1) + energy_mma_central_difference) / derivative_mma_n;
   }
-  for (int i = 0; i < WINDOW; ++i) {
-    double val = energy_mma_q.dequeue();
-    energy_mma_central_difference += (val * cd_coeff[i]);
-    energy_mma_q.enqueue(val);
-  }
-
-  energy_central_difference /= (interval * 0.001);
-  energy_mma_central_difference /= (interval * 0.001);
-
-
-  derivative_mma = (derivative_mma * (derivative_mma_n - 1) + energy_mma_central_difference) / derivative_mma_n;
-
-  //  Serial.print(energy_mma_central_difference);
-  //  Serial.print("\t");
-  //  Serial.print(energy_central_difference);
-  //  Serial.print("\t");
-  Serial.println(derivative_mma*10);
-  //  Serial.print("Central Difference:");
-  //  Serial.println(central_difference);
+  Serial.println(derivative_mma * 10);
   if (energy_mma_central_difference >= TAP_THRESHOLD) {
-    //    Serial.println("Tapped!");
-    //    Serial.println(central_difference);
     return true;
   }
-
-  else {
-    return false;
-  }
+  return false;
 }
 
 void setup() {
@@ -242,10 +204,6 @@ void setup() {
   while (not energy_integral_q.isFull()) {
     energy_integral_q.enqueue(0);
   };
-  // populate energy_integral_q
-  while (not energy_mma_q.isFull()) {
-    energy_mma_q.enqueue(0);
-  };
   // populate tap_interval_q
   while (not tap_interval_q.isFull()) {
     tap_interval_q.enqueue(0);
@@ -254,8 +212,9 @@ void setup() {
 }
 
 void loop() {
-  bool tapFlag = tapDetect();
+  bool tap_detected = tapDetect();
   if (tap_detected) {
+    digitalWrite(LED_BUILTIN, tap_detected);
     tap_detected = false;
     tap_interval_q.dequeue();
     tap_interval_q.enqueue(millis());
