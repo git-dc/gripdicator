@@ -22,14 +22,14 @@
 */
 #include <Queue.h>
 #include "MPU9250.h"
-#include <QueueArray.h>
+//#include <QueueArray.h>
 #define SENSOR_LOOP_DURATION 20
 #define WINDOW 5
 #define TOLERANCE 100
 
 // an MPU9250 object with the MPU-9250 sensor on I2C bus 0 with address 0x68
 MPU9250 IMU(Wire, 0x68);
-QueueArray<double> queue;
+DataQueue<double> queue;
 
 int status;
 double ax;  // accelerometer reading in x axis
