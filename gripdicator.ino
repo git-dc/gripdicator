@@ -20,11 +20,12 @@
   DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-
+#include <Queue.h>
 #include "MPU9250.h"
 #include <QueueArray.h>
 #define SENSOR_LOOP_DURATION 20
 #define WINDOW 5
+#define TOLERANCE 100
 
 // an MPU9250 object with the MPU-9250 sensor on I2C bus 0 with address 0x68
 MPU9250 IMU(Wire, 0x68);
@@ -47,13 +48,28 @@ long interval = SENSOR_LOOP_DURATION;
 long prev_loop = millis() - interval;
 long cur_loop = millis();
 float cd_coeff[5] = {0.0833, -0.6666, 0, 0.6666, -0.0833};
+double passphrase[4] = {1.0, 2.0, 0.5, 0.5};
+bool tap_detected = false;
+DataQueue<long> tap_interval_q(20);
 
+bool in_range(double val, double target, double tolerance = TOLERANCE) {
+  if (val < target + tolerance and val > target - tolerance) {
+    return true;
+  }
+  else {
+    return false;
+  }
+}
 void wakeUp() {
   Serial.println("Awake!");
 }
 
+bool tapDetect() {
+  return true;
+}
+
 double getEnergy(){
-  
+
   cur_loop = millis();
   if (cur_loop - prev_loop >= interval)  {
     prev_loop = cur_loop;
@@ -71,12 +87,59 @@ double getEnergy(){
   return energy_integral;
 }
 
-void calibration() {
+bool check_for_reset() {
+  DataQueue<long> temp_q(20);
+  DataQueue<long> rhythm_base(4);
+  long val = 0;
+  long last_val = 0;
+  long difference = 0;
+  int k = 0;
+  bool successes[4][4] = {
+    {false, false, false, false},
+    {false, false, false, false},
+    {false, false, false, false},
+    {false, false, false, false},
+  };
+  while (not tap_interval_q.isEmpty()) {
+    val = tap_interval_q.dequeue();
+    temp_q.enqueue(val);
+    difference = val - last_val;
+    last_val = val;
+    rhythm_base.enqueue(difference);
+
+    if (in_range(difference, passphrase[k]*rhythm_base.dequeue())) {
+      Serial.println("in range");
+      successes[0][k] = true;
+      k++;
+    }
+
+    else {
+      Serial.println("not in range, resetting");
+      k = 0;
+      for (int i = 0; i++; i < 4) {
+        successes[0][i] = false;
+      }
+    }
+
+
+    //    if (rhythm_base.isFull()) {
+    //      rhythm_base.dequeue();
+    //    }
+
+  }
+  while (not temp_q.isEmpty()) {
+    val = temp_q.dequeue();
+    tap_interval_q.enqueue(val);
+  }
+  return true;
+}
+
+void accel_calibration() {
   digitalWrite(LED_BUILTIN, HIGH);
   double calibration_sum = 0;
   int k = 0;
   long start_time = millis();
-  //  Serial.print("Starting calibration: ");
+  //  Serial.print("Starting accelerometer calibration: ");
   //  Serial.println(millis());
 
   while (millis() - start_time < 1000) {
@@ -93,7 +156,7 @@ void calibration() {
     }
   }
   g_bias = calibration_sum / k - g;
-  //  Serial.print("Calibration complete: ");
+  //  Serial.print("Accelerometer calibration complete: ");
   //  Serial.print(millis());
   //  Serial.print(". Bias calculated to be: ");
   //  Serial.println(g_bias);
@@ -112,8 +175,8 @@ bool tapDetect(){
   // iteratively calculate central difference
   // requeue to restore how the queue looks
 
-  double central_difference = 0; 
- 
+  double central_difference = 0;
+
   for (int i=0; i<WINDOW; ++i){
     double val = queue.dequeue();
     central_difference += (val*cd_coeff[i]);
@@ -152,26 +215,37 @@ void setup() {
   }
   // setting the accelerometer full scale range to +/-8G
   IMU.setAccelRange(MPU9250::ACCEL_RANGE_2G);
-  //  // setting DLPF bandwidth to 20 Hz
-  //  IMU.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_20HZ);
-  //  // setting SRD to 19 for a 50 Hz update rate
-  //  IMU.setSrd(19);
-  //  // enabling wake on motion low power mode with a threshold of 400 mg and
-  //  // an accelerometer data rate of 15.63 Hz.
-  //  IMU.enableWakeOnMotion(400,MPU9250::LP_ACCEL_ODR_15_63HZ);
-  ////   attaching the interrupt to microcontroller pin 1
-  //  pinMode(1, INPUT);
-  //  attachInterrupt(1, wakeUp, RISING);
-
-  calibration();
-  Serial.println("Calibrated");
-  delay(1000);
+  accel_calibration();
   for (int i = 0; i < 5; ++i) {
     queue.enqueue(getEnergy());
+  }
+  while (not tap_interval_q.isFull()) {
+    tap_interval_q.enqueue(0);
   }
 }
 
 void loop() {
   getEnergy();
   bool tapFlag = tapDetect();
+  if (tap_detected) {
+    tap_detected = false;
+    tap_interval_q.dequeue();
+    tap_interval_q.enqueue(millis());
+    check_for_reset();
+  }
+
+  cur_loop = millis();
+  if (cur_loop - prev_loop >= interval)  {
+    prev_loop = cur_loop;
+    IMU.readSensor();
+    ax = IMU.getAccelX_mss();
+    ay = IMU.getAccelY_mss();
+    az = IMU.getAccelZ_mss();
+    ar = sqrt(ax * ax + ay * ay  + az * az) - (g + g_bias);
+    ar2 = pow(ar, 2);
+    energy_integral += ar2;
+    energy_b_derivative = ar2 - prev_val;
+    prev_val = ar2;
+    Serial.println(energy_integral, 6);
+  }
 }
