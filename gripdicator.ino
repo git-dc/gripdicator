@@ -64,12 +64,7 @@ void wakeUp() {
   Serial.println("Awake!");
 }
 
-bool tapDetect() {
-  return true;
-}
-
 double getEnergy(){
-
   cur_loop = millis();
   if (cur_loop - prev_loop >= interval)  {
     prev_loop = cur_loop;
